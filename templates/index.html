@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Driver's License Scanner</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        video { width: 100%; max-width: 500px; border: 2px solid #ccc; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        button:disabled { opacity: 0.5; }
+        #result { margin-top: 20px; padding: 10px; background: #f0f0f0; }
+        .scanning { border: 3px solid #ff6b35; animation: pulse 1s infinite; }
+        .success { border: 3px solid #4caf50; }
+        .error { border: 3px solid #f44336; }
+        .alignment-box { 
+            position: absolute; 
+            border: 3px solid #00ff00; 
+            background: rgba(0, 255, 0, 0.1);
+            z-index: 10;
+            display: none;
+        }
+        #videoContainer { position: relative; display: inline-block; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <h1>Driver's License Scanner</h1>
+    <div id="videoContainer">
+        <video id="video" autoplay></video>
+        <div id="alignmentBox" class="alignment-box"></div>
+    </div>
+    <br>
+    <select id="cameraSelect" onchange="switchCamera()">
+        <option value="">Select Camera</option>
+    </select>
+    <button onclick="startCamera()">Start Camera</button>
+    <div id="result"></div>
+
+    <script>
+        let video = document.getElementById('video');
+        let scanning = false;
+        let currentStream = null;
+        let autoScanInterval = null;
+        let cameras = [];
+
+        // Get available cameras on page load
+        window.onload = async () => {
+            await getCameras();
+        };
+
+        async function getCameras() {
+            try {
+                // Request camera permission first to get labels
+                await navigator.mediaDevices.getUserMedia({ video: true });
+                
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                cameras = devices.filter(device => device.kind === 'videoinput');
+                const select = document.getElementById('cameraSelect');
+                select.innerHTML = '<option value="">Select Camera</option>';
+                
+                cameras.forEach((camera, index) => {
+                    const option = document.createElement('option');
+                    option.value = camera.deviceId;
+                    option.text = camera.label || `Camera ${index + 1}`;
+                    select.appendChild(option);
+                });
+            } catch (err) {
+                console.error('Error getting cameras:', err);
+            }
+        }
+
+        async function startCamera() {
+            const selectedCamera = document.getElementById('cameraSelect').value;
+            if (!selectedCamera) {
+                alert('Please select a camera first');
+                return;
+            }
+            
+            const constraints = {
+                video: {
+                    deviceId: { exact: selectedCamera },
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                }
+            };
+            
+            try {
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = currentStream;
+                
+                // Set up alignment box when video loads
+                video.onloadedmetadata = () => {
+                    setupAlignmentBox();
+                    document.getElementById('alignmentBox').style.display = 'block';
+                    // Start automatic scanning
+                    autoScanInterval = setInterval(captureFrame, 1000);
+                };
+            } catch (err) {
+                document.getElementById('result').innerHTML = 'Error accessing camera: ' + err.message;
+            }
+        }
+
+        function setupAlignmentBox() {
+            const video = document.getElementById('video');
+            const alignmentBox = document.getElementById('alignmentBox');
+            
+            // Position box in center of video
+            const boxWidth = video.offsetWidth * 0.7;  // 70% of video width
+            const boxHeight = video.offsetHeight * 0.15; // 15% of video height
+            const boxLeft = (video.offsetWidth - boxWidth) / 2;
+            const boxTop = (video.offsetHeight - boxHeight) / 2; // Center vertically
+            
+            alignmentBox.style.width = boxWidth + 'px';
+            alignmentBox.style.height = boxHeight + 'px';
+            alignmentBox.style.left = boxLeft + 'px';
+            alignmentBox.style.top = boxTop + 'px';
+        }
+
+        function toggleAutoScan() {
+            // Remove this function - no longer needed
+        }
+
+        async function switchCamera() {
+            if (currentStream) {
+                document.getElementById('alignmentBox').style.display = 'none';
+                startCamera();
+            }
+        }
+
+        // Resize alignment box when window resizes
+        window.addEventListener('resize', setupAlignmentBox);
+
+        async function captureFrame() {
+            if (scanning) return;
+            scanning = true;
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            canvas.toBlob(async (blob) => {
+                const formData = new FormData();
+                formData.append('image', blob, 'frame.jpg');
+                
+                try {
+                    const response = await fetch('/scan', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        // Success feedback - stop auto scanning and turn red
+                        clearInterval(autoScanInterval);
+                        video.className = 'error'; // Red border for success
+                        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                        
+                        let html = '<h3>License Decoded Successfully!</h3>';
+                        html += '<div style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px;">';
+                        
+                        for (const [key, value] of Object.entries(result.data)) {
+                            html += '<div><strong>' + key + ':</strong> ' + value + '</div>';
+                        }
+                        
+                        html += '</div>';
+                        document.getElementById('result').innerHTML = html;
+                    }
+                } catch (err) {
+                    console.log('Scan failed:', err.message);
+                }
+                
+                scanning = false;
+            }, 'image/jpeg');
+        }
+    </script>
+</body>
+</html>

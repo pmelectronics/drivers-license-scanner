@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Driver's License Scanner</title>
+    <script src="https://unpkg.com/@zxing/library@latest/umd/index.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+        video { width: 100%; max-width: 500px; border: 2px solid #ccc; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; }
+        #result { margin-top: 20px; padding: 10px; background: #f0f0f0; }
+        .error { border: 3px solid #f44336; }
+        .alignment-box { 
+            position: absolute; 
+            border: 3px solid #00ff00; 
+            background: rgba(0, 255, 0, 0.1);
+            z-index: 10;
+            display: none;
+        }
+        #videoContainer { position: relative; display: inline-block; }
+    </style>
+</head>
+<body>
+    <h1>Driver's License Scanner</h1>
+    <div id="videoContainer">
+        <video id="video" autoplay></video>
+        <div id="alignmentBox" class="alignment-box"></div>
+    </div>
+    <br>
+    <select id="cameraSelect" onchange="switchCamera()">
+        <option value="">Select Camera</option>
+    </select>
+    <button onclick="startCamera()">Start Camera</button>
+    <div id="result"></div>
+
+    <script>
+        let video = document.getElementById('video');
+        let scanning = false;
+        let currentStream = null;
+        let autoScanInterval = null;
+        let codeReader = new ZXing.BrowserPDF417Reader();
+
+        // Get available cameras on page load
+        window.onload = async () => {
+            await getCameras();
+        };
+
+        async function getCameras() {
+            try {
+                await navigator.mediaDevices.getUserMedia({ video: true });
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameras = devices.filter(device => device.kind === 'videoinput');
+                const select = document.getElementById('cameraSelect');
+                select.innerHTML = '<option value="">Select Camera</option>';
+                
+                cameras.forEach((camera, index) => {
+                    const option = document.createElement('option');
+                    option.value = camera.deviceId;
+                    option.text = camera.label || `Camera ${index + 1}`;
+                    select.appendChild(option);
+                });
+            } catch (err) {
+                console.error('Error getting cameras:', err);
+            }
+        }
+
+        async function startCamera() {
+            const selectedCamera = document.getElementById('cameraSelect').value;
+            if (!selectedCamera) {
+                alert('Please select a camera first');
+                return;
+            }
+            
+            const constraints = {
+                video: {
+                    deviceId: { exact: selectedCamera },
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                }
+            };
+            
+            try {
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = currentStream;
+                
+                video.onloadedmetadata = () => {
+                    setupAlignmentBox();
+                    document.getElementById('alignmentBox').style.display = 'block';
+                    autoScanInterval = setInterval(scanFrame, 1000);
+                };
+            } catch (err) {
+                document.getElementById('result').innerHTML = 'Error accessing camera: ' + err.message;
+            }
+        }
+
+        function setupAlignmentBox() {
+            const alignmentBox = document.getElementById('alignmentBox');
+            const boxWidth = video.offsetWidth * 0.7;
+            const boxHeight = video.offsetHeight * 0.15;
+            const boxLeft = (video.offsetWidth - boxWidth) / 2;
+            const boxTop = (video.offsetHeight - boxHeight) / 2;
+            
+            alignmentBox.style.width = boxWidth + 'px';
+            alignmentBox.style.height = boxHeight + 'px';
+            alignmentBox.style.left = boxLeft + 'px';
+            alignmentBox.style.top = boxTop + 'px';
+        }
+
+        async function scanFrame() {
+            if (scanning) return;
+            scanning = true;
+
+            try {
+                const result = await codeReader.decodeOnceFromVideoDevice(undefined, 'video');
+                
+                if (result) {
+                    clearInterval(autoScanInterval);
+                    video.className = 'error'; // Red border for success
+                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                    
+                    const parsedData = parseDLData(result.text);
+                    displayResult(parsedData);
+                }
+            } catch (err) {
+                // Continue scanning on error
+            }
+            
+            scanning = false;
+        }
+
+        function parseDLData(rawData) {
+            const parsed = {};
+            const fieldMap = {
+                'DCS': 'Last Name',
+                'DAC': 'First Name',
+                'DBD': 'Issue Date',
+                'DBA': 'Expiration Date',
+                'DBB': 'Date of Birth',
+                'DBC': 'Sex',
+                'DAY': 'Eye Color',
+                'DAU': 'Height',
+                'DAG': 'Address',
+                'DAI': 'City',
+                'DAJ': 'State',
+                'DAK': 'ZIP Code',
+                'DAQ': 'License Number'
+            };
+            
+            const lines = rawData.replace(/\r/g, '').split('\n');
+            
+            for (const line of lines) {
+                if (line.length >= 3) {
+                    const fieldCode = line.substring(0, 3);
+                    const fieldValue = line.substring(3).trim();
+                    
+                    if (fieldMap[fieldCode] && fieldValue) {
+                        parsed[fieldMap[fieldCode]] = fieldValue;
+                    }
+                }
+            }
+            
+            return parsed;
+        }
+
+        function displayResult(data) {
+            let html = '<h3>License Decoded Successfully!</h3>';
+            html += '<div style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px;">';
+            
+            for (const [key, value] of Object.entries(data)) {
+                html += '<div><strong>' + key + ':</strong> ' + value + '</div>';
+            }
+            
+            html += '</div>';
+            document.getElementById('result').innerHTML = html;
+        }
+
+        async function switchCamera() {
+            if (currentStream) {
+                document.getElementById('alignmentBox').style.display = 'none';
+                startCamera();
+            }
+        }
+
+        window.addEventListener('resize', setupAlignmentBox);
+    </script>
+</body>
+</html>
