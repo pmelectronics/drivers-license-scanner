@@ -33,10 +33,13 @@
         .download-btn { background: #28a745; color: white; border: none; padding: 8px 15px; border-radius: 3px; cursor: pointer; margin: 10px 5px; }
         .download-btn:hover { background: #218838; }
         .annotated-image { max-width: 100%; height: auto; border: 2px solid #28a745; border-radius: 5px; margin: 10px 0; }
+        #stats { position: fixed; top: 10px; right: 10px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 5px; font-size: 12px; max-width: 200px; }
+        label { margin: 0 10px; font-size: 14px; }
     </style>
 </head>
 <body>
     <h1>Driver's License Scanner</h1>
+    <p><strong>Tip:</strong> Use iPhone or high-quality cameras for best results. PDF417 barcodes contain dense information requiring good camera resolution.</p>
     <p>Note: Lighting must be very even, and the barcode in the back must be inside the green box overlay to work.</p>
     <div id="videoContainer">
         <video id="video" autoplay></video>
@@ -48,7 +51,12 @@
     </select>
     <button onclick="startCamera()">Start Camera</button>
     <button onclick="flipCamera()">Flip Camera</button>
+    <br><br>
+    <label>Box Width (%): <input type="number" id="boxWidth" value="70" min="10" max="100" onchange="updateOverlay()"></label>
+    <label>Box Height (%): <input type="number" id="boxHeight" value="15" min="5" max="50" onchange="updateOverlay()"></label>
     <div id="result"></div>
+    <div id="stats">Loading scan statistics...</div>
+    <footer><a href="https://example.com">Visit My Homepage</a></footer>
 
     <script>
         let video = document.getElementById('video');
@@ -56,32 +64,60 @@
         let currentStream = null;
         let autoScanInterval = null;
         let cameras = [];
+        let idleTimer = null;
+        let boxWidth = 70;
+        let boxHeight = 15;
+
+        // Parse URL parameters
+        function parseUrlParams() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('width')) {
+                boxWidth = Math.max(10, Math.min(100, parseInt(params.get('width'))));
+                document.getElementById('boxWidth').value = boxWidth;
+            }
+            if (params.has('height')) {
+                boxHeight = Math.max(5, Math.min(50, parseInt(params.get('height'))));
+                document.getElementById('boxHeight').value = boxHeight;
+            }
+        }
+
+        // Idle detection
+        function resetIdleTimer() {
+            clearTimeout(idleTimer);
+            idleTimer = setTimeout(() => {
+                window.location.href = 'https://example.com';
+            }, 300000); // 5 minutes
+        }
+
+        // Track user activity
+        ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+            document.addEventListener(event, resetIdleTimer, true);
+        });
+
+        resetIdleTimer();
 
         // Get available cameras on page load
         window.onload = async () => {
+            parseUrlParams();
             await getCameras();
-            await loadStats();
+            loadStats();
         };
 
-        async function loadStats() {
-            try {
-                const response = await fetch('/scan-stats');
-                const stats = await response.json();
-                let html = `<p><strong>Total successful scans: ${stats.total_scans}</strong></p>`;
-                if (stats.last_scans.length > 0) {
-                    html += '<p>Last scans: ';
-                    stats.last_scans.forEach(scan => {
-                        const date = new Date(scan);
-                        html += date.toLocaleString() + ' | ';
-                    });
-                    html = html.slice(0, -3) + '</p>';
-                }
-                const statsDiv = document.getElementById('stats');
-                if (statsDiv) statsDiv.innerHTML = html;
-            } catch (err) {
-                const statsDiv = document.getElementById('stats');
-                if (statsDiv) statsDiv.innerHTML = '<p>Stats unavailable</p>';
-            }
+        function loadStats() {
+            fetch('/scan-stats')
+                .then(response => response.json())
+                .then(stats => {
+                    let html = `<strong>Total scans: ${stats.total_scans}</strong>`;
+                    if (stats.last_scans.length > 0) {
+                        html += '<br>Last: ' + new Date(stats.last_scans[stats.last_scans.length - 1]).toLocaleString();
+                    }
+                    const statsDiv = document.getElementById('stats');
+                    if (statsDiv) statsDiv.innerHTML = html;
+                })
+                .catch(() => {
+                    const statsDiv = document.getElementById('stats');
+                    if (statsDiv) statsDiv.innerHTML = 'Stats unavailable';
+                });
         }
 
         async function getCameras() {
@@ -143,16 +179,23 @@
             const video = document.getElementById('video');
             const alignmentBox = document.getElementById('alignmentBox');
             
-            // Position box in center of video
-            const boxWidth = video.offsetWidth * 0.7;  // 70% of video width
-            const boxHeight = video.offsetHeight * 0.15; // 15% of video height
-            const boxLeft = (video.offsetWidth - boxWidth) / 2;
-            const boxTop = (video.offsetHeight - boxHeight) / 2; // Center vertically
+            const boxWidthPx = video.offsetWidth * (boxWidth / 100);
+            const boxHeightPx = video.offsetHeight * (boxHeight / 100);
+            const boxLeft = (video.offsetWidth - boxWidthPx) / 2;
+            const boxTop = (video.offsetHeight - boxHeightPx) / 2;
             
-            alignmentBox.style.width = boxWidth + 'px';
-            alignmentBox.style.height = boxHeight + 'px';
+            alignmentBox.style.width = boxWidthPx + 'px';
+            alignmentBox.style.height = boxHeightPx + 'px';
             alignmentBox.style.left = boxLeft + 'px';
             alignmentBox.style.top = boxTop + 'px';
+        }
+
+        function updateOverlay() {
+            boxWidth = parseInt(document.getElementById('boxWidth').value);
+            boxHeight = parseInt(document.getElementById('boxHeight').value);
+            if (document.getElementById('alignmentBox').style.display === 'block') {
+                setupAlignmentBox();
+            }
         }
 
         function flipCamera() {
@@ -215,6 +258,8 @@
             canvas.toBlob(async (blob) => {
                 const formData = new FormData();
                 formData.append('image', blob, 'frame.jpg');
+                formData.append('box_width', boxWidth);
+                formData.append('box_height', boxHeight);
                 
                 try {
                     const response = await fetch('/scan', {
@@ -230,7 +275,7 @@
                         if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
                         
                         // Update stats
-                        await loadStats();
+                        loadStats();
                         
                         let html = '<h3>License Decoded Successfully!</h3>';
                         

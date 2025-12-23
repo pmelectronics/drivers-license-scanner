@@ -73,6 +73,10 @@ numpy==1.24.3
 
 ## Usage
 
+### Privacy & Statistics
+
+**Important:** This scanner tracks successful scans for statistical purposes only. Each successful scan increments a counter that can be accessed via the `/scan-stats` API endpoint. No personal data from licenses is stored - only scan counts and timestamps are recorded.
+
 ### Starting the Application
 
 ```bash
@@ -90,9 +94,10 @@ The server starts at `http://localhost:5000` (or your specified port)
 
 1. **Select Camera**: Choose from available cameras in the dropdown
 2. **Start Camera**: Click "Start Camera" to begin video feed
-3. **Position License**: Place driver's license so the back barcode is within the green alignment box
-4. **Automatic Scanning**: The app continuously scans every second
-5. **Results**: When successful, displays:
+3. **Customize Overlay**: Adjust box width/height percentages or use URL parameters (`?width=80&height=20`)
+4. **Position License**: Place driver's license so the back barcode is within the green alignment box
+5. **Automatic Scanning**: The app continuously scans every second
+6. **Results**: When successful, displays:
    - Annotated image showing detected barcode area
    - Prettified license information (copy-pasteable)
    - Collapsible raw barcode data with copy button
@@ -118,6 +123,8 @@ The server starts at `http://localhost:5000` (or your specified port)
 - **Image Download**: Save annotated scan results
 - **Responsive Design**: Works on desktop and mobile browsers
 - **Security**: No server-side file storage, base64 image embedding
+- **Privacy**: Only scan statistics stored, no personal data retention
+- **Session Management**: Automatic idle user redirection to prevent resource consumption
 
 ### Troubleshooting
 
