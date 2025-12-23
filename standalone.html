@@ -46,7 +46,11 @@
 
         async function getCameras() {
             try {
-                await navigator.mediaDevices.getUserMedia({ video: true });
+                // Request camera permission first to get proper labels
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                stream.getTracks().forEach(track => track.stop()); // Stop the stream immediately
+                
+                // Now enumerate devices to get proper labels
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const cameras = devices.filter(device => device.kind === 'videoinput');
                 const select = document.getElementById('cameraSelect');
@@ -58,6 +62,8 @@
                     option.text = camera.label || `Camera ${index + 1}`;
                     select.appendChild(option);
                 });
+                
+                console.log('Found cameras:', cameras.map(c => c.label));
             } catch (err) {
                 console.error('Error getting cameras:', err);
             }
