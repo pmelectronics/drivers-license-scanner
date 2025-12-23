@@ -76,6 +76,10 @@ numpy==1.24.3
 ### Starting the Application
 
 ```bash
+sudo apt-get install libzbar0 libzbar-dev
+```
+
+```bash
 python app.py        # Default port 5000
 python app.py 8080   # Custom port 8080
 ```
