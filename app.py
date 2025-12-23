@@ -60,8 +60,8 @@ def parse_dl_data(raw_data):
         'DDG': 'Middle Name Truncated'
     }
     
-    # Split by line feed and parse each field
-    lines = decoded_data.replace('\r', '').split('\n')
+    # Split by both line feed and record separator
+    lines = decoded_data.replace('\r', '').replace('\x1e', '\n').split('\n')
     
     for line in lines:
         if len(line) >= 3:
