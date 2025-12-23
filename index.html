@@ -119,44 +119,121 @@
             if (scanning) return;
             scanning = true;
             
+            console.log('=== SCAN STARTED ===');
             const scanBtn = document.getElementById('scanBtn');
             scanBtn.disabled = true;
             scanBtn.textContent = 'Scanning...';
 
             try {
+                console.log('Video dimensions:', video.videoWidth, 'x', video.videoHeight);
+                console.log('Video element size:', video.offsetWidth, 'x', video.offsetHeight);
+                
                 const canvas = document.createElement('canvas');
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(video, 0, 0);
+                console.log('Canvas created:', canvas.width, 'x', canvas.height);
                 
                 const boxWidth = Math.floor(video.videoWidth * 0.7);
                 const boxHeight = Math.floor(video.videoHeight * 0.15);
                 const boxLeft = Math.floor((video.videoWidth - boxWidth) / 2);
                 const boxTop = Math.floor((video.videoHeight - boxHeight) / 2);
                 
+                console.log('Alignment box calc:');
+                console.log('- Position:', boxLeft, ',', boxTop);
+                console.log('- Size:', boxWidth, 'x', boxHeight);
+                console.log('- Percentage of image:', (boxWidth/video.videoWidth*100).toFixed(1) + '%', 'x', (boxHeight/video.videoHeight*100).toFixed(1) + '%');
+                
+                // Try full image first
+                console.log('Attempting full image scan...');
+                try {
+                    const fullResult = await codeReader.decodeFromCanvas(canvas);
+                    if (fullResult) {
+                        console.log('✓ FULL IMAGE SUCCESS!');
+                        console.log('- Format:', fullResult.format);
+                        console.log('- Text length:', fullResult.text.length);
+                        console.log('- First 200 chars:', fullResult.text.substring(0, 200));
+                        
+                        video.className = 'error';
+                        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                        const parsedData = parseDLData(fullResult.text);
+                        console.log('- Parsed fields:', Object.keys(parsedData));
+                        displayResult(parsedData);
+                        
+                        scanBtn.disabled = false;
+                        scanBtn.textContent = 'Scan License';
+                        scanning = false;
+                        console.log('=== SCAN COMPLETE (FULL) ===');
+                        return;
+                    }
+                } catch (e) {
+                    console.log('✗ Full image scan failed:', e.message);
+                }
+                
+                // Try cropped area
+                console.log('Attempting cropped area scan...');
                 const imageData = ctx.getImageData(boxLeft, boxTop, boxWidth, boxHeight);
+                console.log('- ImageData extracted:', imageData.width, 'x', imageData.height, 'pixels');
+                
                 const scanCanvas = document.createElement('canvas');
                 scanCanvas.width = boxWidth;
                 scanCanvas.height = boxHeight;
-                scanCanvas.getContext('2d').putImageData(imageData, 0, 0);
+                const scanCtx = scanCanvas.getContext('2d');
+                scanCtx.putImageData(imageData, 0, 0);
+                console.log('- Scan canvas created:', scanCanvas.width, 'x', scanCanvas.height);
                 
-                const result = await codeReader.decodeFromCanvas(scanCanvas);
+                // Save debug image
+                const debugUrl = scanCanvas.toDataURL('image/png');
+                console.log('- Debug image URL (copy to browser):', debugUrl);
                 
-                if (result) {
-                    video.className = 'error';
-                    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-                    
-                    const parsedData = parseDLData(result.text);
-                    displayResult(parsedData);
+                // Try different ZXing readers
+                const readers = [
+                    { name: 'PDF417', reader: new ZXing.BrowserPDF417Reader() },
+                    { name: 'MultiFormat', reader: new ZXing.BrowserMultiFormatReader() }
+                ];
+                
+                for (const {name, reader} of readers) {
+                    try {
+                        console.log(`- Trying ${name} reader...`);
+                        const result = await reader.decodeFromCanvas(scanCanvas);
+                        
+                        if (result) {
+                            console.log(`✓ CROPPED SCAN SUCCESS with ${name}!`);
+                            console.log('- Format:', result.format);
+                            console.log('- Text length:', result.text.length);
+                            console.log('- First 200 chars:', result.text.substring(0, 200));
+                            
+                            video.className = 'error';
+                            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                            const parsedData = parseDLData(result.text);
+                            console.log('- Parsed fields:', Object.keys(parsedData));
+                            displayResult(parsedData);
+                            
+                            scanBtn.disabled = false;
+                            scanBtn.textContent = 'Scan License';
+                            scanning = false;
+                            console.log('=== SCAN COMPLETE (CROPPED) ===');
+                            return;
+                        }
+                    } catch (readerErr) {
+                        console.log(`✗ ${name} reader failed:`, readerErr.message);
+                    }
                 }
+                
+                console.log('✗ All scan attempts failed');
+                document.getElementById('result').innerHTML = 'No barcode detected. Check console for debug info.';
+                
             } catch (err) {
-                document.getElementById('result').innerHTML = 'No barcode detected. Try again.';
+                console.error('✗ SCAN ERROR:', err);
+                console.error('- Stack:', err.stack);
+                document.getElementById('result').innerHTML = 'Scan failed: ' + err.message;
             }
             
             scanBtn.disabled = false;
             scanBtn.textContent = 'Scan License';
             scanning = false;
+            console.log('=== SCAN ENDED ===');
         }
 
         function parseDLData(rawData) {
