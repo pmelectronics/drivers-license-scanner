@@ -51,7 +51,7 @@
         let scanning = false;
         let currentStream = null;
         let autoScanInterval = null;
-        let codeReader = new ZXing.BrowserMultiFormatReader();
+        let codeReader = new ZXing.BrowserPDF417Reader();
         
         // Debug logging for mobile
         function debugLog(message) {
@@ -182,8 +182,8 @@
                 ctx.drawImage(video, 0, 0);
                 debugLog(`Canvas created: ${canvas.width}x${canvas.height}`);
                 
-                // Try full image first
-                debugLog('Attempting full image scan...');
+                // Try PDF417 reader first
+                debugLog('Attempting full image scan with PDF417 reader...');
                 try {
                     const fullResult = await codeReader.decodeBitmap(canvas);
                     if (fullResult) {
@@ -205,7 +205,33 @@
                         return;
                     }
                 } catch (e) {
-                    debugLog(`✗ Full image scan failed: ${e.message}`);
+                    debugLog(`✗ PDF417 full scan failed: ${e.message}`);
+                }
+                
+                // Try MultiFormat as fallback
+                debugLog('Trying MultiFormat reader as fallback...');
+                try {
+                    const multiReader = new ZXing.BrowserMultiFormatReader();
+                    const fullResult = await multiReader.decodeBitmap(canvas);
+                    if (fullResult) {
+                        debugLog('✓ MULTIFORMAT SUCCESS!');
+                        debugLog(`- Format: ${fullResult.getBarcodeFormat()}`);
+                        debugLog(`- Text length: ${fullResult.getText().length}`);
+                        
+                        video.className = 'error';
+                        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                        const parsedData = parseDLData(fullResult.getText());
+                        debugLog(`- Parsed fields: ${Object.keys(parsedData).join(', ')}`);
+                        displayResult(parsedData);
+                        
+                        scanBtn.disabled = false;
+                        scanBtn.textContent = 'Scan License';
+                        scanning = false;
+                        debugLog('=== SCAN COMPLETE (MULTIFORMAT) ===');
+                        return;
+                    }
+                } catch (e) {
+                    debugLog(`✗ MultiFormat full scan failed: ${e.message}`);
                 }
                 
                 // Try cropped area for PDF417
@@ -224,11 +250,12 @@
                 const scanCtx = scanCanvas.getContext('2d');
                 scanCtx.putImageData(imageData, 0, 0);
                 
-                // Try cropped area
+                // Try PDF417 on cropped area
+                debugLog('Attempting cropped PDF417 scan...');
                 try {
                     const croppedResult = await codeReader.decodeBitmap(scanCanvas);
                     if (croppedResult) {
-                        debugLog('✓ CROPPED SCAN SUCCESS!');
+                        debugLog('✓ CROPPED PDF417 SUCCESS!');
                         debugLog(`- Format: ${croppedResult.getBarcodeFormat()}`);
                         debugLog(`- Text length: ${croppedResult.getText().length}`);
                         
@@ -241,11 +268,37 @@
                         scanBtn.disabled = false;
                         scanBtn.textContent = 'Scan License';
                         scanning = false;
-                        debugLog('=== SCAN COMPLETE (CROPPED) ===');
+                        debugLog('=== SCAN COMPLETE (CROPPED PDF417) ===');
                         return;
                     }
                 } catch (croppedErr) {
-                    debugLog(`✗ Cropped scan failed: ${croppedErr.message}`);
+                    debugLog(`✗ PDF417 cropped scan failed: ${croppedErr.message}`);
+                }
+                
+                // Try MultiFormat on cropped area
+                debugLog('Trying MultiFormat on cropped area...');
+                try {
+                    const multiReader = new ZXing.BrowserMultiFormatReader();
+                    const croppedResult = await multiReader.decodeBitmap(scanCanvas);
+                    if (croppedResult) {
+                        debugLog('✓ CROPPED MULTIFORMAT SUCCESS!');
+                        debugLog(`- Format: ${croppedResult.getBarcodeFormat()}`);
+                        debugLog(`- Text length: ${croppedResult.getText().length}`);
+                        
+                        video.className = 'error';
+                        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                        const parsedData = parseDLData(croppedResult.getText());
+                        debugLog(`- Parsed fields: ${Object.keys(parsedData).join(', ')}`);
+                        displayResult(parsedData);
+                        
+                        scanBtn.disabled = false;
+                        scanBtn.textContent = 'Scan License';
+                        scanning = false;
+                        debugLog('=== SCAN COMPLETE (CROPPED MULTIFORMAT) ===');
+                        return;
+                    }
+                } catch (croppedErr) {
+                    debugLog(`✗ MultiFormat cropped scan failed: ${croppedErr.message}`);
                 }
                 
                 debugLog('✗ All scan attempts failed');
