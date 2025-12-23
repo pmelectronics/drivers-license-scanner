@@ -64,6 +64,15 @@
         // Get available cameras on page load
         window.onload = async () => {
             await getCameras();
+            // Debug ZXing API
+            debugLog('ZXing object: ' + typeof ZXing);
+            if (typeof ZXing !== 'undefined') {
+                debugLog('ZXing keys: ' + Object.keys(ZXing).join(', '));
+                if (ZXing.BrowserMultiFormatReader) {
+                    const reader = new ZXing.BrowserMultiFormatReader();
+                    debugLog('Reader methods: ' + Object.getOwnPropertyNames(Object.getPrototypeOf(reader)).filter(m => m.includes('decode')).join(', '));
+                }
+            }
         };
 
         async function getCameras() {
@@ -160,9 +169,23 @@
                 
                 // Try full image first
                 debugLog('Attempting full image scan...');
-                try {
-                    const fullResult = await codeReader.decodeOnceFromCanvas(canvas);
-                    if (fullResult) {
+                // Try multiple ZXing decode methods
+                const decodeMethods = ['decodeFromImageElement', 'decodeFromCanvas', 'decodeOnce', 'decode'];
+                let fullResult = null;
+                
+                for (const method of decodeMethods) {
+                    if (typeof codeReader[method] === 'function') {
+                        try {
+                            debugLog(`Trying ${method} on video element...`);
+                            fullResult = await codeReader[method](video);
+                            if (fullResult) break;
+                        } catch (e) {
+                            debugLog(`${method} failed: ${e.message}`);
+                        }
+                    }
+                }
+                
+                if (fullResult) {
                         debugLog('✓ FULL IMAGE SUCCESS!');
                         debugLog(`- Format: ${fullResult.getBarcodeFormat()}`);
                         debugLog(`- Text length: ${fullResult.getText().length}`);
@@ -180,8 +203,8 @@
                         debugLog('=== SCAN COMPLETE (FULL) ===');
                         return;
                     }
-                } catch (e) {
-                    debugLog(`✗ Full image scan failed: ${e.message}`);
+                } else {
+                    debugLog('✗ Full image scan failed with all methods');
                 }
                 
                 // Try cropped area for PDF417
@@ -200,9 +223,29 @@
                 const scanCtx = scanCanvas.getContext('2d');
                 scanCtx.putImageData(imageData, 0, 0);
                 
-                try {
-                    const croppedResult = await codeReader.decodeOnceFromCanvas(scanCanvas);
-                    if (croppedResult) {
+                // Try multiple decode methods on cropped canvas
+                let croppedResult = null;
+                
+                for (const method of decodeMethods) {
+                    if (typeof codeReader[method] === 'function') {
+                        try {
+                            debugLog(`Trying ${method} on cropped canvas...`);
+                            if (method === 'decodeFromImageElement') {
+                                const tempImg = document.createElement('img');
+                                tempImg.src = scanCanvas.toDataURL();
+                                await new Promise(resolve => tempImg.onload = resolve);
+                                croppedResult = await codeReader[method](tempImg);
+                            } else {
+                                croppedResult = await codeReader[method](scanCanvas);
+                            }
+                            if (croppedResult) break;
+                        } catch (e) {
+                            debugLog(`${method} on cropped failed: ${e.message}`);
+                        }
+                    }
+                }
+                
+                if (croppedResult) {
                         debugLog('✓ CROPPED SCAN SUCCESS!');
                         debugLog(`- Format: ${croppedResult.getBarcodeFormat()}`);
                         debugLog(`- Text length: ${croppedResult.getText().length}`);
@@ -219,8 +262,8 @@
                         debugLog('=== SCAN COMPLETE (CROPPED) ===');
                         return;
                     }
-                } catch (croppedErr) {
-                    debugLog(`✗ Cropped scan failed: ${croppedErr.message}`);
+                } else {
+                    debugLog('✗ Cropped scan failed with all methods');
                 }
                 
                 debugLog('✗ All scan attempts failed');
