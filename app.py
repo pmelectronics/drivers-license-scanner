@@ -36,7 +36,7 @@ def parse_dl_data(raw_data):
     # Decode HTML entities and control characters
     import html
     decoded_data = html.unescape(raw_data)
-    decoded_data = decoded_data.replace('<LF>', '\n').replace('<RS>', '\x1e').replace('<CR>', '\r')
+    decoded_data = decoded_data.replace('<LF>', '\n').replace('<RS>', '\x1e').replace('<CR>', '\r').replace('\r', '')
     
     # Common ANSI field mappings
     field_map = {
@@ -63,11 +63,8 @@ def parse_dl_data(raw_data):
         'DCJ': 'Audit Information'
     }
     
-    # Remove DL prefix and split by field codes using regex
-    decoded_data = decoded_data.replace('\r', '').replace('\x1e', '\n')
-    
-    # Find all field codes and their values using regex
-    pattern = r'(D[A-Z]{2})([^D]*?)(?=D[A-Z]{2}|$)'
+    # Find all field codes with optional DL prefix
+    pattern = r'(?:DL)?(D[A-Z]{2})([^D]*?)(?=(?:DL)?D[A-Z]{2}|\n|$)'
     matches = re.findall(pattern, decoded_data, re.DOTALL)
     
     for field_code, field_value in matches:
