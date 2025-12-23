@@ -82,6 +82,13 @@ def parse_dl_data(raw_data):
             if field_code == 'DBC':
                 sex_map = {'1': 'Male', '2': 'Female', '9': 'Not Specified'}
                 parsed[field_map[field_code]] = sex_map.get(field_value, field_value)
+            # Format ZIP code by removing trailing zeros
+            elif field_code == 'DAK':
+                zip_code = field_value.rstrip('0').rstrip()
+                if len(zip_code) >= 5:
+                    if len(zip_code) > 5:
+                        zip_code = zip_code[:5] + '-' + zip_code[5:]
+                    parsed[field_map[field_code]] = zip_code
             else:
                 parsed[field_map[field_code]] = field_value
     
