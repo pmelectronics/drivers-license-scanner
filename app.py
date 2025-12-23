@@ -70,7 +70,12 @@ def parse_dl_data(raw_data):
     for field_code, field_value in matches:
         field_value = field_value.strip()
         if field_code in field_map and field_value:
-            parsed[field_map[field_code]] = field_value
+            # Convert sex code to readable format
+            if field_code == 'DBC':
+                sex_map = {'1': 'Male', '2': 'Female', '9': 'Not Specified'}
+                parsed[field_map[field_code]] = sex_map.get(field_value, field_value)
+            else:
+                parsed[field_map[field_code]] = field_value
     
     return parsed
 
