@@ -76,9 +76,11 @@
                     });
                     html = html.slice(0, -3) + '</p>';
                 }
-                document.getElementById('stats').innerHTML = html;
+                const statsDiv = document.getElementById('stats');
+                if (statsDiv) statsDiv.innerHTML = html;
             } catch (err) {
-                document.getElementById('stats').innerHTML = '<p>Stats unavailable</p>';
+                const statsDiv = document.getElementById('stats');
+                if (statsDiv) statsDiv.innerHTML = '<p>Stats unavailable</p>';
             }
         }
 
