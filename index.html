@@ -77,13 +77,22 @@
 
         async function getCameras() {
             try {
-                // Request camera permission first to get proper labels
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                stream.getTracks().forEach(track => track.stop()); // Stop the stream immediately
+                // First try to enumerate devices without requesting permission
+                let devices = await navigator.mediaDevices.enumerateDevices();
+                let cameras = devices.filter(device => device.kind === 'videoinput');
                 
-                // Now enumerate devices to get proper labels
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const cameras = devices.filter(device => device.kind === 'videoinput');
+                // If no labels, request permission to get proper labels
+                if (cameras.length > 0 && !cameras[0].label) {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                        stream.getTracks().forEach(track => track.stop());
+                        devices = await navigator.mediaDevices.enumerateDevices();
+                        cameras = devices.filter(device => device.kind === 'videoinput');
+                    } catch (permErr) {
+                        debugLog('Permission denied, using generic camera names');
+                    }
+                }
+                
                 const select = document.getElementById('cameraSelect');
                 select.innerHTML = '<option value="">Select Camera</option>';
                 
@@ -94,9 +103,12 @@
                     select.appendChild(option);
                 });
                 
-                debugLog('Found cameras: ' + cameras.map(c => c.label).join(', '));
+                debugLog(`Found ${cameras.length} cameras`);
             } catch (err) {
                 debugLog('Error getting cameras: ' + err.message);
+                // Add a default option so users can still try
+                const select = document.getElementById('cameraSelect');
+                select.innerHTML = '<option value="">Select Camera</option><option value="default">Default Camera</option>';
             }
         }
 
@@ -108,7 +120,10 @@
             }
             
             const constraints = {
-                video: {
+                video: selectedCamera === 'default' ? {
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                } : {
                     deviceId: { exact: selectedCamera },
                     width: { ideal: 1920 },
                     height: { ideal: 1080 }
@@ -125,8 +140,8 @@
                 video.onloadedmetadata = () => {
                     setupAlignmentBox();
                     document.getElementById('alignmentBox').style.display = 'block';
-                    // Remove auto-scanning for manual control
                 };
+                debugLog('Camera started successfully');
             } catch (err) {
                 const errorMsg = 'Error accessing camera: ' + err.message;
                 document.getElementById('result').innerHTML = errorMsg;
@@ -169,23 +184,9 @@
                 
                 // Try full image first
                 debugLog('Attempting full image scan...');
-                // Try multiple ZXing decode methods
-                const decodeMethods = ['decodeFromImageElement', 'decodeFromCanvas', 'decodeOnce', 'decode'];
-                let fullResult = null;
-                
-                for (const method of decodeMethods) {
-                    if (typeof codeReader[method] === 'function') {
-                        try {
-                            debugLog(`Trying ${method} on video element...`);
-                            fullResult = await codeReader[method](video);
-                            if (fullResult) break;
-                        } catch (e) {
-                            debugLog(`${method} failed: ${e.message}`);
-                        }
-                    }
-                }
-                
-                if (fullResult) {
+                try {
+                    const fullResult = await codeReader.decodeBitmap(canvas);
+                    if (fullResult) {
                         debugLog('✓ FULL IMAGE SUCCESS!');
                         debugLog(`- Format: ${fullResult.getBarcodeFormat()}`);
                         debugLog(`- Text length: ${fullResult.getText().length}`);
@@ -203,8 +204,8 @@
                         debugLog('=== SCAN COMPLETE (FULL) ===');
                         return;
                     }
-                } else {
-                    debugLog('✗ Full image scan failed with all methods');
+                } catch (e) {
+                    debugLog(`✗ Full image scan failed: ${e.message}`);
                 }
                 
                 // Try cropped area for PDF417
@@ -223,29 +224,10 @@
                 const scanCtx = scanCanvas.getContext('2d');
                 scanCtx.putImageData(imageData, 0, 0);
                 
-                // Try multiple decode methods on cropped canvas
-                let croppedResult = null;
-                
-                for (const method of decodeMethods) {
-                    if (typeof codeReader[method] === 'function') {
-                        try {
-                            debugLog(`Trying ${method} on cropped canvas...`);
-                            if (method === 'decodeFromImageElement') {
-                                const tempImg = document.createElement('img');
-                                tempImg.src = scanCanvas.toDataURL();
-                                await new Promise(resolve => tempImg.onload = resolve);
-                                croppedResult = await codeReader[method](tempImg);
-                            } else {
-                                croppedResult = await codeReader[method](scanCanvas);
-                            }
-                            if (croppedResult) break;
-                        } catch (e) {
-                            debugLog(`${method} on cropped failed: ${e.message}`);
-                        }
-                    }
-                }
-                
-                if (croppedResult) {
+                // Try cropped area
+                try {
+                    const croppedResult = await codeReader.decodeBitmap(scanCanvas);
+                    if (croppedResult) {
                         debugLog('✓ CROPPED SCAN SUCCESS!');
                         debugLog(`- Format: ${croppedResult.getBarcodeFormat()}`);
                         debugLog(`- Text length: ${croppedResult.getText().length}`);
@@ -262,8 +244,8 @@
                         debugLog('=== SCAN COMPLETE (CROPPED) ===');
                         return;
                     }
-                } else {
-                    debugLog('✗ Cropped scan failed with all methods');
+                } catch (croppedErr) {
+                    debugLog(`✗ Cropped scan failed: ${croppedErr.message}`);
                 }
                 
                 debugLog('✗ All scan attempts failed');
