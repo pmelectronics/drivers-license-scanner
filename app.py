@@ -64,6 +64,14 @@ def parse_dl_data(raw_data):
     lines = decoded_data.replace('\r', '').replace('\x1e', '\n').split('\n')
     
     for line in lines:
+        # Skip header lines
+        if line.startswith('ANSI') or line.startswith('@'):
+            continue
+            
+        # Remove DL prefix if present (e.g., DLDAQ -> DAQ)
+        if line.startswith('DL') and len(line) > 5:
+            line = line[2:]
+        
         if len(line) >= 3:
             field_code = line[:3]
             field_value = line[3:].strip()
