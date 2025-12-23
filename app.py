@@ -77,8 +77,7 @@ def increment_scan_count():
     stats = load_stats()
     stats['scan_count'] += 1
     stats['last_scans'].append(datetime.now().isoformat())
-    if len(stats['last_scans']) > 3:
-        stats['last_scans'].pop(0)
+    stats['last_scans'] = stats['last_scans'][-3:]  # Keep only last 3
     save_stats(stats)
 
 @app.route('/')
