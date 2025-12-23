@@ -56,19 +56,8 @@ For each frame, the system:
 pip install -r requirements.txt
 ```
 
-3. **Optional: Install ZXing-CPP** (recommended for better PDF417 detection):
 ```bash
-pip install zxing-cpp
-```
-
-### Requirements File Contents
-
-```
-Flask==2.3.3
-opencv-python==4.8.1.78
-pyzbar==0.1.9
-Pillow==10.0.1
-numpy==1.24.3
+sudo apt-get install libzbar0 libzbar-dev
 ```
 
 ## Usage
@@ -76,12 +65,9 @@ numpy==1.24.3
 ### Privacy & Statistics
 
 **Important:** This scanner tracks successful scans for statistical purposes only. Each successful scan increments a counter that can be accessed via the `/scan-stats` API endpoint. No personal data from licenses is stored - only scan counts and timestamps are recorded.
+**Example**: GET https://dl-scanner.chrisccluk.live/scan-stats
 
 ### Starting the Application
-
-```bash
-sudo apt-get install libzbar0 libzbar-dev
-```
 
 ```bash
 python app.py        # Default port 5000
