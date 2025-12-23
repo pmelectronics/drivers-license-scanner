@@ -30,6 +30,7 @@
         <option value="">Select Camera</option>
     </select>
     <button onclick="startCamera()">Start Camera</button>
+    <button id="scanBtn" onclick="scanFrame()">Scan License</button>
     <div id="result"></div>
 
     <script>
@@ -94,7 +95,7 @@
                 video.onloadedmetadata = () => {
                     setupAlignmentBox();
                     document.getElementById('alignmentBox').style.display = 'block';
-                    autoScanInterval = setInterval(scanFrame, 1000);
+                    // Remove auto-scanning for manual control
                 };
             } catch (err) {
                 document.getElementById('result').innerHTML = 'Error accessing camera: ' + err.message;
@@ -117,43 +118,44 @@
         async function scanFrame() {
             if (scanning) return;
             scanning = true;
+            
+            const scanBtn = document.getElementById('scanBtn');
+            scanBtn.disabled = true;
+            scanBtn.textContent = 'Scanning...';
 
             try {
-                // Capture frame from video like Flask version
                 const canvas = document.createElement('canvas');
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(video, 0, 0);
                 
-                // Get alignment box area
                 const boxWidth = Math.floor(video.videoWidth * 0.7);
                 const boxHeight = Math.floor(video.videoHeight * 0.15);
                 const boxLeft = Math.floor((video.videoWidth - boxWidth) / 2);
                 const boxTop = Math.floor((video.videoHeight - boxHeight) / 2);
                 
-                // Extract scan area
                 const imageData = ctx.getImageData(boxLeft, boxTop, boxWidth, boxHeight);
                 const scanCanvas = document.createElement('canvas');
                 scanCanvas.width = boxWidth;
                 scanCanvas.height = boxHeight;
                 scanCanvas.getContext('2d').putImageData(imageData, 0, 0);
                 
-                // Decode from canvas
                 const result = await codeReader.decodeFromCanvas(scanCanvas);
                 
                 if (result) {
-                    clearInterval(autoScanInterval);
-                    video.className = 'error'; // Red border for success
+                    video.className = 'error';
                     if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
                     
                     const parsedData = parseDLData(result.text);
                     displayResult(parsedData);
                 }
             } catch (err) {
-                // Continue scanning on error
+                document.getElementById('result').innerHTML = 'No barcode detected. Try again.';
             }
             
+            scanBtn.disabled = false;
+            scanBtn.textContent = 'Scan License';
             scanning = false;
         }
 
