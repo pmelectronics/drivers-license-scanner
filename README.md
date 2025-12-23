@@ -89,6 +89,11 @@ The server starts at `http://localhost:5000` (or your specified port)
    - Collapsible raw barcode data with copy button
    - Download option for annotated image
 
+# Example Photos
+## Publicly generated photo (NOT REAL)
+![annotated image of barcode](./IMG_1306.png)
+![barcode decoded results](./IMG_1307.png)
+
 ### Tips for Best Results
 
 - **Camera Quality**: Use iPhone or high-quality cameras - PDF417 barcodes contain dense information requiring good resolution
