@@ -106,8 +106,8 @@ def scan_barcode():
         h, w = cv_image.shape[:2]
         
         # Define fixed PDF417 scan area
-        box_width = int(w * (request.form.get('box_width', 70) / 100))
-        box_height = int(h * (request.form.get('box_height', 15) / 100))
+        box_width = int(w * (int(request.form.get('box_width', 70)) / 100))
+        box_height = int(h * (int(request.form.get('box_height', 15)) / 100))
         box_left = int((w - box_width) / 2)
         box_top = int((h - box_height) / 2)  # Center vertically
         
