@@ -63,9 +63,17 @@ def parse_dl_data(raw_data):
         'DCJ': 'Audit Information'
     }
     
-    # Find all field codes - handle newline separated format
-    pattern = r'(D[A-Z]{2})([^\n\r]*?)(?=\n|\r|$)'
-    matches = re.findall(pattern, decoded_data, re.MULTILINE)
+    # Find all field codes - handle both inline and newline formats
+    # First try to extract from the header line format
+    header_pattern = r'DL(?:DAQ|D[A-Z]{2})([^D\n\r]*?)(?=D[A-Z]{2}|\n|\r|$)'
+    header_matches = re.findall(r'DL(D[A-Z]{2})([^D\n\r]*?)(?=D[A-Z]{2}|\n|\r|$)', decoded_data)
+    
+    # Then extract from newline separated format
+    pattern = r'^(D[A-Z]{2})([^\n\r]*)$'
+    line_matches = re.findall(pattern, decoded_data, re.MULTILINE)
+    
+    # Combine both sets of matches
+    matches = header_matches + line_matches
     
     for field_code, field_value in matches:
         field_value = field_value.strip()
