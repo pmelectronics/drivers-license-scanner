@@ -20,10 +20,23 @@
         }
         #videoContainer { position: relative; display: inline-block; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .data-section { background: #f9f9f9; padding: 15px; margin: 10px 0; border-radius: 5px; border: 1px solid #ddd; }
+        .copy-btn { background: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-left: 10px; }
+        .copy-btn:hover { background: #0056b3; }
+        .raw-data { background: #f5f5f5; padding: 10px; border-radius: 3px; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
+        .collapsible { cursor: pointer; padding: 10px; background: #e9ecef; border: none; width: 100%; text-align: left; border-radius: 3px; }
+        .collapsible:hover { background: #dee2e6; }
+        .content { display: none; padding: 10px 0; }
+        .prettified-data { font-family: Arial, sans-serif; line-height: 1.6; }
+        .prettified-data div { margin: 5px 0; padding: 5px; background: white; border-radius: 3px; }
+        .download-btn { background: #28a745; color: white; border: none; padding: 8px 15px; border-radius: 3px; cursor: pointer; margin: 10px 5px; }
+        .download-btn:hover { background: #218838; }
+        .annotated-image { max-width: 100%; height: auto; border: 2px solid #28a745; border-radius: 5px; margin: 10px 0; }
     </style>
 </head>
 <body>
     <h1>Driver's License Scanner</h1>
+    <p>Note: Lighting must be very even, and the barcode in the back must be inside the green box overlay to work.</p>
     <div id="videoContainer">
         <video id="video" autoplay></video>
         <div id="alignmentBox" class="alignment-box"></div>
@@ -131,6 +144,39 @@
 
         // Resize alignment box when window resizes
         window.addEventListener('resize', setupAlignmentBox);
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function toggleRawData() {
+            const content = document.getElementById('rawDataContent');
+            content.style.display = content.style.display === 'block' ? 'none' : 'block';
+        }
+        
+        function copyPrettifiedData() {
+            const prettifiedData = document.getElementById('prettifiedData');
+            const text = Array.from(prettifiedData.children).map(div => div.textContent).join('\n');
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Prettified data copied to clipboard!');
+            });
+        }
+        
+        function copyRawData() {
+            const rawData = document.getElementById('rawData').textContent;
+            navigator.clipboard.writeText(rawData).then(() => {
+                alert('Raw data copied to clipboard!');
+            });
+        }
+        
+        function downloadBase64Image(base64Data) {
+            const link = document.createElement('a');
+            link.href = 'data:image/jpeg;base64,' + base64Data;
+            link.download = 'annotated_scan.jpg';
+            link.click();
+        }
 
         async function captureFrame() {
             if (scanning) return;
@@ -159,13 +205,33 @@
                         if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
                         
                         let html = '<h3>License Decoded Successfully!</h3>';
-                        html += '<div style="background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px;">';
+                        
+                        // Display annotated image
+                        if (result.image_base64) {
+                            html += '<img src="data:image/jpeg;base64,' + result.image_base64 + '" class="annotated-image" alt="Annotated scan">';
+                            html += '<br><button class="download-btn" onclick="downloadBase64Image(\'' + result.image_base64 + '\')">Download Image</button>';
+                        }
+                        
+                        // Prettified data section
+                        html += '<div class="data-section">';
+                        html += '<h4>License Information <button class="copy-btn" onclick="copyPrettifiedData()">Copy All</button></h4>';
+                        html += '<div id="prettifiedData" class="prettified-data">';
                         
                         for (const [key, value] of Object.entries(result.data)) {
                             html += '<div><strong>' + key + ':</strong> ' + value + '</div>';
                         }
                         
-                        html += '</div>';
+                        html += '</div></div>';
+                        
+                        // Raw data section (collapsible)
+                        if (result.raw_data) {
+                            html += '<div class="data-section">';
+                            html += '<button class="collapsible" onclick="toggleRawData()">Show Raw Data <button class="copy-btn" onclick="copyRawData(); event.stopPropagation();">Copy Raw</button></button>';
+                            html += '<div id="rawDataContent" class="content">';
+                            html += '<div id="rawData" class="raw-data">' + escapeHtml(result.raw_data) + '</div>';
+                            html += '</div></div>';
+                        }
+                        
                         document.getElementById('result').innerHTML = html;
                     }
                 } catch (err) {

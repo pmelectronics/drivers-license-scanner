@@ -4,6 +4,7 @@ from pyzbar import pyzbar
 import cv2
 import numpy as np
 import re
+import base64
 try:
     import zxingcpp
     ZXING_AVAILABLE = True
@@ -117,12 +118,16 @@ def scan_barcode():
                         cv2.rectangle(annotated_image, (box_left, box_top), (box_left + box_width, box_top + box_height), (0, 255, 0), 3)
                         cv2.putText(annotated_image, "PDF417 (ZXing)", (box_left, box_top-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                         
-                        cv2.imwrite('annotated_image.jpg', annotated_image)
+                        # Convert to base64
+                        _, buffer = cv2.imencode('.jpg', annotated_image)
+                        image_base64 = base64.b64encode(buffer).decode('utf-8')
+                        
                         return jsonify({
                             'success': True, 
                             'data': parsed_data,
                             'raw_data': decoded_data,
-                            'method': 'ZXing-CPP'
+                            'method': 'ZXing-CPP',
+                            'image_base64': image_base64
                         })
                         
             except Exception as e:
@@ -139,7 +144,6 @@ def scan_barcode():
                 for i, (info, barcode_type) in enumerate(zip(decoded_info, decoded_type)):
                     if info and 'PDF417' in str(barcode_type):
                         print(f"SUCCESS! OpenCV decoded PDF417: {info[:100]}...")
-                        cv2.imwrite('annotated_image.jpg', annotated_image)
                         return jsonify({
                             'success': True, 
                             'data': info,
@@ -170,12 +174,19 @@ def scan_barcode():
                         cv2.putText(annotated_image, f"PDF417 ({name})", (x, y-5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
                         
                         decoded_data = barcode.data.decode('utf-8')
+                        parsed_data = parse_dl_data(decoded_data)
                         print(f"SUCCESS! pyzbar {name} decoded PDF417: {decoded_data[:100]}...")
-                        cv2.imwrite('annotated_image.jpg', annotated_image)
+                        
+                        # Convert to base64
+                        _, buffer = cv2.imencode('.jpg', annotated_image)
+                        image_base64 = base64.b64encode(buffer).decode('utf-8')
+                        
                         return jsonify({
                             'success': True, 
-                            'data': decoded_data,
-                            'method': f'pyzbar {name}'
+                            'data': parsed_data,
+                            'raw_data': decoded_data,
+                            'method': f'pyzbar {name}',
+                            'image_base64': image_base64
                         })
                         
             except Exception as e:
@@ -192,4 +203,6 @@ def scan_barcode():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    import sys
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 5000
+    app.run(debug=True, port=port)
