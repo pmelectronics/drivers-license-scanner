@@ -5,6 +5,9 @@ import cv2
 import numpy as np
 import re
 import base64
+from datetime import datetime
+import json
+import os
 try:
     import zxingcpp
     ZXING_AVAILABLE = True
@@ -12,6 +15,19 @@ except ImportError:
     ZXING_AVAILABLE = False
 
 app = Flask(__name__)
+
+# Persistent scan counter
+STATS_FILE = 'scan_stats.json'
+
+def load_stats():
+    if os.path.exists(STATS_FILE):
+        with open(STATS_FILE, 'r') as f:
+            return json.load(f)
+    return {'scan_count': 0, 'last_scans': []}
+
+def save_stats(stats):
+    with open(STATS_FILE, 'w') as f:
+        json.dump(stats, f)
 
 def parse_dl_data(raw_data):
     """Parse ANSI driver's license data into readable format"""
@@ -21,8 +37,6 @@ def parse_dl_data(raw_data):
     import html
     decoded_data = html.unescape(raw_data)
     decoded_data = decoded_data.replace('<LF>', '\n').replace('<RS>', '\x1e').replace('<CR>', '\r')
-    
-    print(f"Decoded data: {decoded_data[:200]}...")
     
     # Common ANSI field mappings
     field_map = {
@@ -56,13 +70,28 @@ def parse_dl_data(raw_data):
             
             if field_code in field_map and field_value:
                 parsed[field_map[field_code]] = field_value
-                print(f"Found field: {field_code} -> {field_map[field_code]}: {field_value}")
     
     return parsed
+
+def increment_scan_count():
+    stats = load_stats()
+    stats['scan_count'] += 1
+    stats['last_scans'].append(datetime.now().isoformat())
+    if len(stats['last_scans']) > 3:
+        stats['last_scans'].pop(0)
+    save_stats(stats)
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/scan-stats')
+def scan_stats():
+    stats = load_stats()
+    return jsonify({
+        'total_scans': stats['scan_count'],
+        'last_scans': stats['last_scans']
+    })
 
 @app.route('/scan', methods=['POST'])
 def scan_barcode():
@@ -75,8 +104,6 @@ def scan_barcode():
         pil_image = Image.open(file.stream)
         cv_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
         h, w = cv_image.shape[:2]
-        
-        print(f"Image size: {w}x{h}")
         
         # Define fixed PDF417 scan area
         box_width = int(w * 0.7)
@@ -98,30 +125,20 @@ def scan_barcode():
                 # Convert to grayscale for zxing
                 gray_area = cv2.cvtColor(pdf417_area, cv2.COLOR_BGR2GRAY)
                 
-                # Try without format restriction first, then with PDF417 only
                 results = zxingcpp.read_barcodes(gray_area)
-                
-                print(f"ZXing found {len(results)} barcodes")
                 
                 for result in results:
                     if result.valid and 'PDF417' in str(result.format):
                         decoded_data = result.text
-                        # Parse the ANSI driver's license data
                         parsed_data = parse_dl_data(decoded_data)
-                        
-                        print(f"SUCCESS! ZXing decoded PDF417: {decoded_data[:100]}...")
-                        print("\n=== PARSED DRIVER'S LICENSE DATA ===")
-                        for key, value in parsed_data.items():
-                            print(f"{key}: {value}")
-                        print("=====================================\n")
                         
                         cv2.rectangle(annotated_image, (box_left, box_top), (box_left + box_width, box_top + box_height), (0, 255, 0), 3)
                         cv2.putText(annotated_image, "PDF417 (ZXing)", (box_left, box_top-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
                         
-                        # Convert to base64
                         _, buffer = cv2.imencode('.jpg', annotated_image)
                         image_base64 = base64.b64encode(buffer).decode('utf-8')
                         
+                        increment_scan_count()
                         return jsonify({
                             'success': True, 
                             'data': parsed_data,
@@ -131,26 +148,24 @@ def scan_barcode():
                         })
                         
             except Exception as e:
-                print(f"ZXing failed: {e}")
+                pass
         
         # Try OpenCV barcode detector
         try:
             detector = cv2.barcode.BarcodeDetector()
             retval, decoded_info, decoded_type = detector.detectAndDecode(pdf417_area)
             
-            print(f"OpenCV detector found: {len(decoded_info) if decoded_info else 0} barcodes")
-            
             if decoded_info:
                 for i, (info, barcode_type) in enumerate(zip(decoded_info, decoded_type)):
                     if info and 'PDF417' in str(barcode_type):
-                        print(f"SUCCESS! OpenCV decoded PDF417: {info[:100]}...")
+                        increment_scan_count()
                         return jsonify({
                             'success': True, 
                             'data': info,
                             'method': 'OpenCV'
                         })
         except Exception as e:
-            print(f"OpenCV detector failed: {e}")
+            pass
         processing_methods = [
             ('Original', pdf417_area),
             ('Gray', cv2.cvtColor(pdf417_area, cv2.COLOR_BGR2GRAY)),
@@ -162,7 +177,6 @@ def scan_barcode():
         for name, img in processing_methods:
             try:
                 barcodes = pyzbar.decode(img)
-                print(f"pyzbar {name}: Found {len(barcodes)} barcodes")
                 
                 for barcode in barcodes:
                     if barcode.type == 'PDF417':
@@ -175,12 +189,11 @@ def scan_barcode():
                         
                         decoded_data = barcode.data.decode('utf-8')
                         parsed_data = parse_dl_data(decoded_data)
-                        print(f"SUCCESS! pyzbar {name} decoded PDF417: {decoded_data[:100]}...")
                         
-                        # Convert to base64
                         _, buffer = cv2.imencode('.jpg', annotated_image)
                         image_base64 = base64.b64encode(buffer).decode('utf-8')
                         
+                        increment_scan_count()
                         return jsonify({
                             'success': True, 
                             'data': parsed_data,
@@ -190,7 +203,7 @@ def scan_barcode():
                         })
                         
             except Exception as e:
-                print(f"pyzbar {name} failed: {e}")
+                pass
         
         return jsonify({
             'success': False, 
@@ -199,7 +212,6 @@ def scan_barcode():
         })
 
     except Exception as e:
-        print(f"Error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

@@ -44,8 +44,8 @@ For each frame, the system:
 ### Prerequisites
 
 - Python 3.7+
-- Webcam or camera device
-- Modern web browser with camera permissions and good quality
+- Webcam or camera device (iPhone or high-quality cameras recommended for dense PDF417 barcodes)
+- Modern web browser with camera permissions
 
 ### Installation
 
@@ -100,8 +100,10 @@ The server starts at `http://localhost:5000` (or your specified port)
 
 ### Tips for Best Results
 
+- **Camera Quality**: Use iPhone or high-quality cameras - PDF417 barcodes contain dense information requiring good resolution
 - **Lighting**: Ensure even, bright lighting without shadows or glare
 - **Positioning**: Keep the PDF417 barcode fully within the green box
+- **Orientation**: Use the flip camera button if the barcode appears mirrored
 - **Stability**: Hold the license steady during scanning
 - **Distance**: Maintain appropriate distance for clear barcode visibility
 - **Angle**: Keep the license flat and parallel to the camera
@@ -110,6 +112,8 @@ The server starts at `http://localhost:5000` (or your specified port)
 
 - **Real-time Detection**: Continuous scanning without manual capture
 - **Multiple Decoders**: Fallback detection methods for reliability
+- **Camera Controls**: Flip camera orientation for better positioning
+- **Scan Statistics**: Persistent counter tracking successful scans
 - **Data Export**: Copy prettified or raw data to clipboard
 - **Image Download**: Save annotated scan results
 - **Responsive Design**: Works on desktop and mobile browsers
@@ -136,8 +140,9 @@ The server starts at `http://localhost:5000` (or your specified port)
 
 ## Technical Details
 
-- **Backend**: Flask web server
+- **Backend**: Flask web server with persistent scan statistics
 - **Computer Vision**: OpenCV for image processing
 - **Barcode Libraries**: ZXing-CPP, pyzbar, OpenCV barcode detector
 - **Frontend**: Vanilla JavaScript with WebRTC camera access
+- **Data Storage**: JSON file for scan counter persistence
 - **Security**: Client-side image handling, no server file storage
