@@ -57,27 +57,23 @@ def parse_dl_data(raw_data):
         'DCG': 'Country',
         'DDE': 'Last Name Truncated',
         'DDF': 'First Name Truncated',
-        'DDG': 'Middle Name Truncated'
+        'DDG': 'Middle Name Truncated',
+        'DAD': 'Middle Name',
+        'DCF': 'Document Discriminator',
+        'DCJ': 'Audit Information'
     }
     
-    # Split by both line feed and record separator
-    lines = decoded_data.replace('\r', '').replace('\x1e', '\n').split('\n')
+    # Remove DL prefix and split by field codes using regex
+    decoded_data = decoded_data.replace('\r', '').replace('\x1e', '\n')
     
-    for line in lines:
-        # Skip header lines
-        if line.startswith('ANSI') or line.startswith('@'):
-            continue
-            
-        # Remove DL prefix if present (e.g., DLDAQ -> DAQ)
-        if line.startswith('DL') and len(line) > 5:
-            line = line[2:]
-        
-        if len(line) >= 3:
-            field_code = line[:3]
-            field_value = line[3:].strip()
-            
-            if field_code in field_map and field_value:
-                parsed[field_map[field_code]] = field_value
+    # Find all field codes and their values using regex
+    pattern = r'(D[A-Z]{2})([^D]*?)(?=D[A-Z]{2}|$)'
+    matches = re.findall(pattern, decoded_data, re.DOTALL)
+    
+    for field_code, field_value in matches:
+        field_value = field_value.strip()
+        if field_code in field_map and field_value:
+            parsed[field_map[field_code]] = field_value
     
     return parsed
 
