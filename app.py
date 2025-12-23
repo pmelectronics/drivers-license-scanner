@@ -63,9 +63,9 @@ def parse_dl_data(raw_data):
         'DCJ': 'Audit Information'
     }
     
-    # Find all field codes with optional DL prefix
-    pattern = r'(?:DL)?(D[A-Z]{2})([^D]*?)(?=(?:DL)?D[A-Z]{2}|\n|$)'
-    matches = re.findall(pattern, decoded_data, re.DOTALL)
+    # Find all field codes - handle newline separated format
+    pattern = r'(D[A-Z]{2})([^\n\r]*?)(?=\n|\r|$)'
+    matches = re.findall(pattern, decoded_data, re.MULTILINE)
     
     for field_code, field_value in matches:
         field_value = field_value.strip()
