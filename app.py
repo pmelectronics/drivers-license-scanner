@@ -48,6 +48,7 @@ def parse_dl_data(raw_data):
         'DBB': 'Date of Birth',
         'DBC': 'Sex',
         'DAY': 'Eye Color',
+        'DAZ': 'Hair Color',
         'DAU': 'Height',
         'DAW': 'Weight',
         'DAG': 'Address',
